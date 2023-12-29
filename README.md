@@ -4,7 +4,7 @@ This is my attempt at re-creating minesweeper. I've been a fan of the game for a
 
 ## To Run
 
-1. Download this repository to your local machine by either using ```git clone https://github.com/AldenCutler/minesweeper``` or by downloading as a compressed folder then unzipping.
+1. Download this repository to your local machine.
 2. Run the ```main.py``` program in the downloaded folder.
 
 ## Issues or Bugs
