@@ -15,12 +15,18 @@ pygame.display.set_caption("MineSweeper")
 # background color
 window.fill((200, 200, 200))
 
+# separator
+pygame.draw.line(window, (0, 0, 0), (0, 640), (WIDTH, 640), 2)
+
 mine_value = -1
 empty_value = 0  
 
 def check_surrounding(board: list[list[int]], y: int, x: int):
     """
     Checks surrounding squares for mines
+    - board: 2D list that represents the board
+    - y: y coordinate of square
+    - x: x coordinate of square
     """
     num_mines = 0
     for i in range(-1, 2):
@@ -174,14 +180,17 @@ def reset_board():
     window.blit(reset_pressed, (WIDTH // 2 - 20, 650))
     pygame.display.update()
 
+####################
+## main game loop ##
+####################
 def play():
     
-    # reset button
+    # reset the reset button
     reset = pygame.image.load("assets/reset.png")
     reset = pygame.transform.scale(reset, (40, 40))
     window.blit(reset, (WIDTH // 2 - 20, 650))
     
-    # generate board
+    # generate new board and reset the grid
     board = generate_board()
     draw_grid()
 
@@ -195,11 +204,12 @@ def play():
             
         for event in pygame.event.get():
             
+            # check if game over
             for square in revealed:
                 if board[square[1]][square[0]] == mine_value:
                     game_over()
             
-            # handle quit
+            # check for user quit
             if event.type == pygame.QUIT:
                 running = False
                 
@@ -209,12 +219,12 @@ def play():
                 # get x, y coordinates of clicked square
                 pos = pygame.mouse.get_pos()
                 
+                # reset if reset button is clicked
                 if pos[0] >= WIDTH // 2 - 20 and pos[0] <= WIDTH // 2 + 20 and pos[1] >= 650 and pos[1] <= 690:
                     reset_board()
                     play()
                 
-                
-                
+                # get x, y coordinates of clicked square
                 x = pos[0] // 40
                 y = pos[1] // 40
                 
@@ -239,9 +249,11 @@ def play():
                         
                 # left click (reveal)
                 elif event.button == 1:
-                    
+                    # if square is flagged, do nothing
+                    if (x, y) in flagged:
+                        continue
                     # if square is unrevealed, reveal square
-                    if (x, y) not in revealed:
+                    elif (x, y) not in revealed:
                         revealed.append((x, y))
                         img = pygame.image.load(f"assets/{board[y][x]}.png")
                         img = pygame.transform.scale(img, (40, 40))
@@ -250,7 +262,6 @@ def play():
                         # if square is empty, chord_from_empty
                         if board[y][x] == 0:
                             chord_from_empty(y, x, revealed, board)
-                            
                     # if square is already revealed, then reveal surrounding squares if current square has enough flags         
                     elif (x, y) in revealed:   
                         num_flags = 0
@@ -264,7 +275,14 @@ def play():
                         # if enough flags, reveal all surrounding squares except for flagged squares
                         if num_flags == board[y][x]:
                             chord_from_flagged(x, y, revealed, flagged, board)
-                            
+               
+            # check if game is won
+            if len(revealed) == 480 - NUM_MINES:
+                win = pygame.image.load("assets/win.png")
+                win = pygame.transform.scale(win, (40, 40))
+                window.blit(win, (WIDTH // 2 - 20, 650))
+                         
+            # update display
             pygame.display.update()
-        
+          
 play()
