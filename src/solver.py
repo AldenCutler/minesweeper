@@ -69,25 +69,29 @@ class MinesweeperSolver:
 
     def apply_set_logic(self) -> bool:
         """
-        Compares sets of non-revealed squares surrounding revealed cells.
+        Compares sets of unrevealed squares surrounding revealed cells.
         If Set A is a subset of Set B, the difference must contain (Value B - Value A) mines.
         """
         progress_made = False
         revealed_numbers = []
-        for y in range(self.board.num_rows):
+        for y in range(self.board.nuaddm_rows):
             for x in range(self.board.num_cols):
                 if self.board.get_square_state(x, y) == SquareState.REVEALED:
                     val = self.board.get_square_value(x, y)
                     if val > 0:
                         surround = self.board.get_surrounding_squares(x, y)
-                        # Include both flagged and unrevealed squares in the set
-                        non_revealed = {s for s in surround if self.board.get_square_state(s[0], s[1]) != SquareState.REVEALED}
+                        # Use only unrevealed squares for the set
+                        unrevealed = {s for s in surround if self.board.get_square_state(s[0], s[1]) == SquareState.UNREVEALED}
                         flags = {s for s in surround if self.board.get_square_state(s[0], s[1]) == SquareState.FLAGGED}
-                        revealed_numbers.append({
-                            'pos': (x, y),
-                            'set': non_revealed,
-                            'needed': val - len(flags)
-                        })
+                        
+                        # Only add if we still need mines from the unrevealed set
+                        needed = val - len(flags)
+                        if needed >= 0:
+                            revealed_numbers.append({
+                                'pos': (x, y),
+                                'set': unrevealed,
+                                'needed': needed
+                            })
 
         for i in range(len(revealed_numbers)):
             for j in range(len(revealed_numbers)):
@@ -100,16 +104,14 @@ class MinesweeperSolver:
                     diff_set = b['set'] - a['set']
                     diff_mines = b['needed'] - a['needed']
                     
-                    # We only care about the unrevealed squares within the difference set
-                    unrevealed_diff = {s for s in diff_set if self.board.get_square_state(s[0], s[1]) == SquareState.UNREVEALED}
-                    
-                    if diff_mines == 0 and len(unrevealed_diff) > 0:
-                        for sq in unrevealed_diff:
+                    if diff_mines == 0 and len(diff_set) > 0:
+                        for sq in diff_set:
                             self.game.reveal_square(sq[0], sq[1])
                         progress_made = True
-                    elif diff_mines == len(unrevealed_diff) and len(unrevealed_diff) > 0:
-                        for sq in unrevealed_diff:
+                    elif diff_mines == len(diff_set) and len(diff_set) > 0:
+                        for sq in diff_set:
                             self.game.toggle_flag_square(sq[0], sq[1])
                         progress_made = True
         
         return progress_made
+

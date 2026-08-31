@@ -23,6 +23,10 @@ def play(game: MinesweeperGame):
             if game.board.check_win():
                 return game_over(game)
             
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    game.reset_game()
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 game.handle_mouse_click(event)
                 
