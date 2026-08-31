@@ -4,114 +4,210 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from src.game import MinesweeperGame
 
+
 class MinesweeperSolver:
     def __init__(self, game: Any):
         self.game = game
-        self.board = game.board
+        self.board: Board = game.board
 
     def solve_board(self):
         """
-        Solve the Minesweeper game using a simple algorithm.
+        Solve the Minesweeper game using deterministic logic.
+
+        The solver repeatedly:
+        1. Applies simple local Minesweeper rules.
+        2. Applies subset/set-difference logic.
+
+        If neither technique can make further progress, the solver stops.
         """
         while not self.board.check_win() and not self.board.check_lose():
             progress_made = False
+
+            # Step 1: Apply simple local rules.
             for y in range(self.board.num_rows):
                 for x in range(self.board.num_cols):
-                    if self.board.get_square_state(x, y) == SquareState.REVEALED:
-                        if self.simple_resolve_surrounding(x, y):
-                            progress_made = True
-            
+                    if self.board.get_square_state(x, y) != SquareState.REVEALED:
+                        continue
+
+                    if self.simple_resolve_surrounding(x, y):
+                        progress_made = True
+
+            if self.board.check_win() or self.board.check_lose():
+                break
+
+            # Step 2: Apply subset/set-difference logic.
             if not progress_made:
                 if self.apply_set_logic():
                     progress_made = True
-                else:
-                    break
 
-        
-    def simple_resolve_surrounding(self, x: int, y: int):
+            # No deterministic progress can be made.
+            if not progress_made:
+                break
+
+    def simple_resolve_surrounding(self, x: int, y: int) -> bool:
         """
-        If a square's number equals the number of surrounding flagged squares, 
-        then all other surrounding squares are safe to reveal.
-        
-        If a square's number equals the number of surrounding unrevealed squares, 
-        then all surrounding unrevealed squares are mines and should be flagged.
+        Apply basic Minesweeper rules to a revealed square.
+
+        Rule 1:
+            If the number of surrounding flags equals the square's value,
+            all remaining unrevealed surrounding squares are safe.
+
+        Rule 2:
+            If the number of unrevealed surrounding squares equals the
+            number of mines still needed, all of those squares are mines.
+
+        Returns:
+            True if at least one square was revealed or flagged.
         """
+        value = self.board.get_square_value(x, y)
+
+        # This method should only be called on revealed squares, but avoid
+        # treating a mine as a numbered square just in case.
+        if value < 0:
+            return False
+
         progress_made = False
+
         surrounding_squares = self.board.get_surrounding_squares(x, y)
-        states = {
-            SquareState.REVEALED: [],
-            SquareState.FLAGGED: [],
-            SquareState.UNREVEALED: []
-        }
+
+        flagged = []
+        unrevealed = []
+
         for square in surrounding_squares:
             state = self.board.get_square_state(square[0], square[1])
-            if state == SquareState.REVEALED:
-                states[SquareState.REVEALED].append(square)
-            elif state == SquareState.FLAGGED:
-                states[SquareState.FLAGGED].append(square)
+
+            if state == SquareState.FLAGGED:
+                flagged.append(square)
             elif state == SquareState.UNREVEALED:
-                states[SquareState.UNREVEALED].append(square)
-                
-        if len(states[SquareState.FLAGGED]) < self.board.get_square_value(x, y):
-            unrevealed_count = len(states[SquareState.UNREVEALED])
-            mines_needed = self.board.get_square_value(x, y) - len(states[SquareState.FLAGGED])
-            if unrevealed_count == mines_needed:
-                for square in states[SquareState.UNREVEALED]:
-                    self.game.toggle_flag_square(square[0], square[1])
-                    progress_made = True
-        
-        if len(states[SquareState.FLAGGED]) == self.board.get_square_value(x, y):
-            for square in states[SquareState.UNREVEALED]:
+                unrevealed.append(square)
+
+        num_flags = len(flagged)
+        mines_needed = value - num_flags
+
+        # Rule 1:
+        # We have already identified every mine surrounding this square,
+        # so every remaining unrevealed square is safe.
+        if mines_needed == 0:
+            for square in unrevealed:
                 self.game.reveal_square(square[0], square[1])
                 progress_made = True
-    
+
+        # Rule 2:
+        # Every unrevealed square must be a mine.
+        elif mines_needed == len(unrevealed):
+            for square in unrevealed:
+                self.game.toggle_flag_square(square[0], square[1])
+                progress_made = True
+
         return progress_made
 
     def apply_set_logic(self) -> bool:
         """
-        Compares sets of unrevealed squares surrounding revealed cells.
-        If Set A is a subset of Set B, the difference must contain (Value B - Value A) mines.
+        Compare sets of unrevealed squares surrounding revealed cells.
+
+        If Set A is a subset of Set B, then:
+
+            B - A
+
+        contains:
+
+            mines(B) - mines(A)
+
+        mines.
+
+        Therefore:
+            - If the difference requires 0 mines, every square in the
+              difference is safe.
+            - If the difference requires exactly len(difference) mines,
+              every square in the difference is a mine.
+
+        Returns:
+            True if at least one square was revealed or flagged.
         """
         progress_made = False
-        revealed_numbers = []
-        for y in range(self.board.nuaddm_rows):
-            for x in range(self.board.num_cols):
-                if self.board.get_square_state(x, y) == SquareState.REVEALED:
-                    val = self.board.get_square_value(x, y)
-                    if val > 0:
-                        surround = self.board.get_surrounding_squares(x, y)
-                        # Use only unrevealed squares for the set
-                        unrevealed = {s for s in surround if self.board.get_square_state(s[0], s[1]) == SquareState.UNREVEALED}
-                        flags = {s for s in surround if self.board.get_square_state(s[0], s[1]) == SquareState.FLAGGED}
-                        
-                        # Only add if we still need mines from the unrevealed set
-                        needed = val - len(flags)
-                        if needed >= 0:
-                            revealed_numbers.append({
-                                'pos': (x, y),
-                                'set': unrevealed,
-                                'needed': needed
-                            })
 
+        revealed_numbers = []
+
+        # Build the constraints generated by each revealed numbered square.
+        for y in range(self.board.num_rows):
+            for x in range(self.board.num_cols):
+                if self.board.get_square_state(x, y) != SquareState.REVEALED:
+                    continue
+
+                value = self.board.get_square_value(x, y)
+
+                # Only numbered squares generate constraints.
+                if value <= 0:
+                    continue
+
+                surrounding = self.board.get_surrounding_squares(x, y)
+
+                unrevealed = {
+                    square
+                    for square in surrounding
+                    if self.board.get_square_state(
+                        square[0],
+                        square[1]
+                    ) == SquareState.UNREVEALED
+                }
+
+                flags = {
+                    square
+                    for square in surrounding
+                    if self.board.get_square_state(
+                        square[0],
+                        square[1]
+                    ) == SquareState.FLAGGED
+                }
+
+                mines_needed = value - len(flags)
+
+                # An inconsistent constraint should never occur if all
+                # flags are correct. Ignore it rather than making unsafe
+                # deductions.
+                if mines_needed < 0 or mines_needed > len(unrevealed):
+                    continue
+
+                revealed_numbers.append({
+                    "pos": (x, y),
+                    "set": unrevealed,
+                    "needed": mines_needed,
+                })
+
+        # Compare every pair of constraints.
         for i in range(len(revealed_numbers)):
             for j in range(len(revealed_numbers)):
-                if i == j: continue
-                
+                if i == j:
+                    continue
+
                 a = revealed_numbers[i]
                 b = revealed_numbers[j]
-                
-                if a['set'].issubset(b['set']):
-                    diff_set = b['set'] - a['set']
-                    diff_mines = b['needed'] - a['needed']
-                    
-                    if diff_mines == 0 and len(diff_set) > 0:
-                        for sq in diff_set:
-                            self.game.reveal_square(sq[0], sq[1])
-                        progress_made = True
-                    elif diff_mines == len(diff_set) and len(diff_set) > 0:
-                        for sq in diff_set:
-                            self.game.toggle_flag_square(sq[0], sq[1])
-                        progress_made = True
-        
-        return progress_made
 
+                set_a = a["set"]
+                set_b = b["set"]
+
+                # We can only subtract A from B if A is a subset of B.
+                if not set_a.issubset(set_b):
+                    continue
+
+                diff_set = set_b - set_a
+                diff_mines = b["needed"] - a["needed"]
+
+                if not diff_set:
+                    continue
+
+                # Difference contains no mines.
+                if diff_mines == 0:
+                    for x, y in diff_set:
+                        self.game.reveal_square(x, y)
+
+                    progress_made = True
+
+                # Every square in the difference is a mine.
+                elif diff_mines == len(diff_set):
+                    for x, y in diff_set:
+                        self.game.toggle_flag_square(x, y)
+
+                    progress_made = True
+
+        return progress_made

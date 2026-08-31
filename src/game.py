@@ -7,7 +7,7 @@ from src.board import (
     SURROUNDING_SQUARE_OFFSETS, 
     Board
 )
-from src.solver import MinesweeperSolver
+from src.solver_hybrid import HybridMinesweeperSolver
 from enum import Enum
 
 TILE_SIZE = 40
@@ -206,7 +206,7 @@ class MinesweeperGame:
         Runs the automated solver on the current board state
         """
         logger.debug("Running solver...")
-        solver = MinesweeperSolver(self)
+        solver = HybridMinesweeperSolver(self)
         solver.solve_board()
         pygame.display.update()
 
