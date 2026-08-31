@@ -98,8 +98,8 @@ def test_reset_button_clicked_bounds(monkeypatch):
 	board = make_small_board()
 	game = MinesweeperGame(board, width=120, height=120, num_mines=0, num_rows=3, num_cols=3)
 
-	# center reset button is at (width//2, ~670)
-	assert game.reset_button_clicked((game.width // 2, 660)) is True
+	# center reset button is at (width//2 - 40, ~670)
+	assert game.reset_button_clicked((game.width // 2 - 40, 660)) is True
 	assert game.reset_button_clicked((0, 0)) is False
 
 

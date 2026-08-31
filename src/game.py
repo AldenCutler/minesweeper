@@ -187,7 +187,7 @@ class MinesweeperGame:
         - return: True if reset button is clicked, False otherwise
         """
         # TODO make this work with different board sizes
-        if pos[0] >= self.width // 2 - 60 and pos[0] <= self.width // 2 - 20 and pos[1] >= 650 and pos[1] <= 690:
+        if pos[0] >= self.width // 2 - 60 and pos[0] <= self.width // 2 - 20 and pos[1] >= 640 and pos[1] <= 690:
             return True
         return False
 

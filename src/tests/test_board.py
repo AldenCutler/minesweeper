@@ -71,6 +71,10 @@ def test_check_win():
     assert board.check_win() == True
     # If any non-mine square is not revealed, check_win should return False
     board = Board(num_rows=16, num_cols=30)
+    # Force (0,0) to be a non-mine square to ensure the test is deterministic
+    board.board[0][0] = EMPTY_VALUE
+    # Re-calculate mine count to keep it consistent if necessary, but for this test we just need 
+    # to ensure at least one non-mine square is unrevealed.
     for y in range(16):
         for x in range(30):
             if board.get_square_value(x, y) != MINE_VALUE and (x, y) != (0, 0):
