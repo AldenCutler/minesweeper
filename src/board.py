@@ -1,5 +1,6 @@
 import logging
 import random
+from enum import Enum
 
 EMPTY_VALUE = 0
 MINE_VALUE = -1
@@ -11,6 +12,11 @@ SURROUNDING_SQUARE_OFFSETS = [
 ]
 
 logger = logging.getLogger(__name__)
+
+class SquareState(Enum):
+    UNREVEALED = 0
+    REVEALED = 1
+    FLAGGED = 2
 
 class Board:
     def __init__(self, num_rows, num_cols):
@@ -147,6 +153,20 @@ class Board:
         - return: int value of square
         """
         return self.board[y][x]
+    
+    def get_square_state(self, x: int, y: int) -> SquareState:
+        """
+        Returns the state of the square at (x, y)
+        - x: x coordinate of square
+        - y: y coordinate of square
+        - return: SquareState of square
+        """
+        if (x, y) in self.revealed:
+            return SquareState.REVEALED
+        elif (x, y) in self.flagged:
+            return SquareState.FLAGGED
+        else:
+            return SquareState.UNREVEALED
         
     def check_win(self) -> bool:
         """
@@ -206,3 +226,20 @@ class Board:
             if (new_x, new_y) in self.flagged:
                 num_flags += 1
         return num_flags
+
+    def get_surrounding_squares(self, x: int, y: int) -> list[tuple[int, int]]:
+        """
+        Returns a list of surrounding squares
+        - y: y coordinate of square
+        - x: x coordinate of square
+        - return: list of (x, y) coordinates of surrounding squares
+        """
+        surrounding_squares = []
+        for dx, dy in SURROUNDING_SQUARE_OFFSETS:
+            new_x = x + dx
+            new_y = y + dy
+            if new_y < 0 or new_y > self.num_rows - 1 or new_x < 0 or new_x > self.num_cols - 1:
+                continue
+            surrounding_squares.append((new_x, new_y))
+        return surrounding_squares
+    

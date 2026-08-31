@@ -7,6 +7,7 @@ from src.board import (
     SURROUNDING_SQUARE_OFFSETS, 
     Board
 )
+from src.solver import MinesweeperSolver
 from enum import Enum
 
 TILE_SIZE = 40
@@ -41,7 +42,12 @@ class MinesweeperGame:
         # draw reset button
         reset = pygame.image.load("assets/reset.png")
         reset = pygame.transform.scale(reset, (TILE_SIZE, TILE_SIZE))
-        self.window.blit(reset, (self.width // 2 - 20, 650))
+        self.window.blit(reset, (self.width // 2 - 60, 650))
+        
+        # draw solver button
+        solver_btn = pygame.image.load("assets/solve.png")
+        solver_btn = pygame.transform.scale(solver_btn, (TILE_SIZE, TILE_SIZE))
+        self.window.blit(solver_btn, (self.width // 2 + 20, 650))
         
         # draw grid
         for y in range(self.num_rows):
@@ -78,6 +84,12 @@ class MinesweeperGame:
                 continue
             if (new_x, new_y) in self.board.get_flagged_squares():
                 continue
+            
+            # check that flagged squares are actually mines, if not, do not chord
+            if (new_x, new_y) in self.board.get_flagged_squares():
+                if self.board.get_square_value(new_x, new_y) != MINE_VALUE:
+                    logger.debug(f"Square ({new_x}, {new_y}) is flagged but not a mine, cannot chord")
+                    return
             
             # if the square is empty, reveal it and chord from it
             if self.board.get_square_value(new_x, new_y) == EMPTY_VALUE:
@@ -140,7 +152,11 @@ class MinesweeperGame:
         - y: y coordinate of square
         - return: None
         """
-        if (x, y) in self.board.flagged:
+        if (x, y) in self.board.get_revealed_squares():
+            logger.debug(f"Square ({x}, {y}) is revealed, cannot flag")
+            return
+
+        if (x, y) in self.board.get_flagged_squares():
             self.board.unflag_square(x, y)
             self.set_square(x, y, "unrevealed")
         else:
@@ -153,8 +169,8 @@ class MinesweeperGame:
         """
         logger.debug("Resetting game")
         reset_pressed = pygame.image.load("assets/reset_pressed.png")
-        reset_pressed = pygame.transform.scale(reset_pressed, (40, 40))
-        self.window.blit(reset_pressed, (self.width // 2 - 20, 650))
+        reset_pressed = pygame.transform.scale(reset_pressed, (TILE_SIZE, TILE_SIZE))
+        self.window.blit(reset_pressed, (self.width // 2 - 60, 650))
         pygame.display.update()
         
         time.sleep(0.1)
@@ -171,9 +187,28 @@ class MinesweeperGame:
         - return: True if reset button is clicked, False otherwise
         """
         # TODO make this work with different board sizes
-        if pos[0] >= self.width // 2 - 20 and pos[0] <= self.width // 2 + 20 and pos[1] >= 650 and pos[1] <= 690:
+        if pos[0] >= self.width // 2 - 60 and pos[0] <= self.width // 2 - 20 and pos[1] >= 650 and pos[1] <= 690:
             return True
         return False
+
+    def solver_button_clicked(self, pos) -> bool:
+        """
+        Checks if the solver button is clicked
+        - pos: (x, y) coordinates of mouse click
+        - return: True if solver button is clicked, False otherwise
+        """
+        if pos[0] >= self.width // 2 + 20 and pos[0] <= self.width // 2 + 60 and pos[1] >= 650 and pos[1] <= 690:
+            return True
+        return False
+
+    def run_solver(self):
+        """
+        Runs the automated solver on the current board state
+        """
+        logger.debug("Running solver...")
+        solver = MinesweeperSolver(self)
+        solver.solve_board()
+        pygame.display.update()
 
     def handle_mouse_click(self, event):
         # get x, y coordinates of clicked square
@@ -182,6 +217,12 @@ class MinesweeperGame:
         # reset if reset button is clicked
         if self.reset_button_clicked(pos):
             self.reset_game()
+            return
+
+        # solve if solver button is clicked
+        if self.solver_button_clicked(pos):
+            self.run_solver()
+            return
         
         # get x, y coordinates of clicked square
         x = pos[0] // TILE_SIZE
@@ -197,7 +238,7 @@ class MinesweeperGame:
         # left click (reveal)
         elif event.button == MouseButton.LEFT.value:
             # if square is flagged, do nothing
-            if (x, y) in self.board.flagged:
+            if (x, y) in self.board.get_flagged_squares():
                 logger.debug(f"Square ({x}, {y}) is flagged, cannot reveal")
                 return
             # if square is revealed, chord from square
