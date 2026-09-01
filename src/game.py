@@ -7,6 +7,7 @@ from src.board import (
     SURROUNDING_SQUARE_OFFSETS, 
     Board
 )
+from src.board_analyzer import BoardAnalyzer
 from src.solver_hybrid import HybridMinesweeperSolver
 from enum import Enum
 
@@ -21,13 +22,14 @@ class MouseButton(Enum):
     RIGHT = 3
 
 class MinesweeperGame:
-    def __init__(self, board: Board, width=1200, height=700, num_mines=99, num_rows=16, num_cols=30):
+    def __init__(self, board: Board, width=1200, height=700, num_mines=99, num_rows=16, num_cols=30, recommended_start_square=None):
         self.width:     int            = width
         self.height:    int            = height
         self.board:     Board          = board
         self.num_mines: int            = num_mines
         self.num_rows:  int            = num_rows
         self.num_cols:  int            = num_cols
+        self.recommended_start_square: tuple[int, int] | None = recommended_start_square
         
         pygame.init()
         self.window:    pygame.Surface = pygame.display.set_mode((self.width, self.height))
@@ -58,6 +60,13 @@ class MinesweeperGame:
                 unrevealed = pygame.image.load("assets/unrevealed.png")
                 unrevealed = pygame.transform.scale(unrevealed, (TILE_SIZE, TILE_SIZE))
                 self.window.blit(unrevealed, (x * TILE_SIZE, y * TILE_SIZE))
+        
+        # Highlight recommended starting square with a colored border
+        if self.recommended_start_square:
+            x, y = self.recommended_start_square
+            rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
+            # Draw a bright green border to highlight the recommended square
+            pygame.draw.rect(self.window, (0, 255, 0), rect, 4)
 
         pygame.display.flip()
 
@@ -165,7 +174,8 @@ class MinesweeperGame:
     
     def reset_game(self) -> None:
         """
-        Reset the board to the initial state
+        Reset the board to the initial state with a new solvable board.
+        Generates boards until one is found that can be solved without guessing.
         """
         logger.debug("Resetting game")
         reset_pressed = pygame.image.load("assets/reset_pressed.png")
@@ -175,7 +185,22 @@ class MinesweeperGame:
         
         time.sleep(0.1)
         
-        self.board = Board(num_rows=self.num_rows, num_cols=self.num_cols)
+        # Generate a solvable board with a recommended starting square
+        logger.debug("Generating solvable board...")
+        while True:
+            self.board = Board(num_rows=self.num_rows, num_cols=self.num_cols)
+            
+            if BoardAnalyzer.is_solvable(self.board):
+                start_square = BoardAnalyzer.find_best_starting_square(self.board)
+                if start_square:
+                    logger.debug(f"Generated solvable board! Starting square: {start_square}")
+                    self.recommended_start_square = start_square
+                    break
+                else:
+                    logger.debug("Board is solvable but no good starting square found, regenerating...")
+            else:
+                logger.debug("Board is not solvable, regenerating...")
+        
         self.window = self.init_window()
         
         pygame.display.update()

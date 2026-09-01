@@ -19,13 +19,14 @@ class HybridMinesweeperSolver:
     5. Repeat until the board is solved or no solver can make progress
     """
 
-    def __init__(self, game: Any):
+    def __init__(self, game: Any, headless: bool = False):
         self.game = game
         self.board: Board = game.board
-        self.basic_solver = MinesweeperSolver(game)
-        self.gaussian_solver = GaussianMinesweeperSolver(game)
+        self.headless = headless
+        self.basic_solver = MinesweeperSolver(game, headless=headless)
+        self.gaussian_solver = GaussianMinesweeperSolver(game, headless=headless)
 
-    def solve_board(self):
+    def solve_board(self) -> bool:
         """
         Solve the Minesweeper game using a hybrid approach.
 
@@ -34,6 +35,9 @@ class HybridMinesweeperSolver:
         2. Gaussian solver - powerful, handles complex constraints
 
         Stops when the game is won/lost or neither solver can make progress.
+        
+        Returns:
+            True if the board was solved, False if it got stuck or lost.
         """
         while not self.board.check_win() and not self.board.check_lose():
             # Try basic solver first (it's faster for simple patterns)
@@ -55,6 +59,9 @@ class HybridMinesweeperSolver:
             if not gaussian_progress:
                 # Neither solver could make progress
                 break
+
+        # Return True only if the board was won
+        return self.board.check_win()
 
     def _run_basic_solver_once(self) -> bool:
         """

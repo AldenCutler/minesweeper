@@ -6,9 +6,24 @@ if TYPE_CHECKING:
 
 
 class MinesweeperSolver:
-    def __init__(self, game: Any):
+    def __init__(self, game: Any, headless: bool = False):
         self.game = game
         self.board: Board = game.board
+        self.headless = headless
+
+    def _reveal_square(self, x: int, y: int) -> None:
+        """Reveal a square, with UI update only if not headless."""
+        if self.headless:
+            self.board.reveal_square(x, y)
+        else:
+            self.game.reveal_square(x, y)
+
+    def _flag_square(self, x: int, y: int) -> None:
+        """Flag a square, with UI update only if not headless."""
+        if self.headless:
+            self.board.flag_square(x, y)
+        else:
+            self.game.toggle_flag_square(x, y)
 
     def solve_board(self):
         """
@@ -89,14 +104,14 @@ class MinesweeperSolver:
         # so every remaining unrevealed square is safe.
         if mines_needed == 0:
             for square in unrevealed:
-                self.game.reveal_square(square[0], square[1])
+                self._reveal_square(square[0], square[1])
                 progress_made = True
 
         # Rule 2:
         # Every unrevealed square must be a mine.
         elif mines_needed == len(unrevealed):
             for square in unrevealed:
-                self.game.toggle_flag_square(square[0], square[1])
+                self._flag_square(square[0], square[1])
                 progress_made = True
 
         return progress_made
@@ -199,14 +214,14 @@ class MinesweeperSolver:
                 # Difference contains no mines.
                 if diff_mines == 0:
                     for x, y in diff_set:
-                        self.game.reveal_square(x, y)
+                        self._reveal_square(x, y)
 
                     progress_made = True
 
                 # Every square in the difference is a mine.
                 elif diff_mines == len(diff_set):
                     for x, y in diff_set:
-                        self.game.toggle_flag_square(x, y)
+                        self._flag_square(x, y)
 
                     progress_made = True
 

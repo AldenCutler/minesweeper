@@ -8,9 +8,24 @@ if TYPE_CHECKING:
 
 
 class GaussianMinesweeperSolver:
-    def __init__(self, game: Any):
+    def __init__(self, game: Any, headless: bool = False):
         self.game = game
         self.board: Board = game.board
+        self.headless = headless
+
+    def _reveal_square(self, x: int, y: int) -> None:
+        """Reveal a square, with UI update only if not headless."""
+        if self.headless:
+            self.board.reveal_square(x, y)
+        else:
+            self.game.reveal_square(x, y)
+
+    def _flag_square(self, x: int, y: int) -> None:
+        """Flag a square, with UI update only if not headless."""
+        if self.headless:
+            self.board.flag_square(x, y)
+        else:
+            self.game.toggle_flag_square(x, y)
 
     def solve_board(self):
         """
@@ -128,13 +143,13 @@ class GaussianMinesweeperSolver:
         # Flag known mines.
         for x, y in mines:
             if self.board.get_square_state(x, y) == SquareState.UNREVEALED:
-                self.game.toggle_flag_square(x, y)
+                self._flag_square(x, y)
                 progress_made = True
 
         # Reveal known safe squares.
         for x, y in not_mines:
             if self.board.get_square_state(x, y) == SquareState.UNREVEALED:
-                self.game.reveal_square(x, y)
+                self._reveal_square(x, y)
                 progress_made = True
 
         return progress_made

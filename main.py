@@ -1,10 +1,41 @@
 from src.game import MinesweeperGame
 from src.board import Board
+from src.board_analyzer import BoardAnalyzer
 import logging
 import argparse
 import pygame
 
 logger = logging.getLogger(__name__)
+
+def generate_solvable_board(num_rows: int, num_cols: int) -> tuple[Board, tuple[int, int]]:
+    """
+    Generate a solvable Minesweeper board.
+    
+    Keeps generating boards until one is found that can be solved
+    without guessing, then returns the board and the recommended
+    starting square.
+    
+    Args:
+        num_rows: Number of rows in the board
+        num_cols: Number of columns in the board
+        
+    Returns:
+        (board, (start_x, start_y)) - the solvable board and starting square
+    """
+    while True:
+        board = Board(num_rows=num_rows, num_cols=num_cols)
+        
+        logger.debug("Checking if board is solvable...")
+        if BoardAnalyzer.is_solvable(board):
+            # Board is solvable, find the best starting square
+            start_square = BoardAnalyzer.find_best_starting_square(board)
+            if start_square:
+                logger.debug(f"Board is solvable! Starting square: {start_square}")
+                return board, start_square
+            else:
+                logger.debug("Board is solvable but no good starting square found, regenerating...")
+        else:
+            logger.debug("Board is not solvable, regenerating...")
 
 def play(game: MinesweeperGame):
     """
@@ -56,8 +87,8 @@ if __name__ == "__main__":
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
         
-    board = Board(
-        num_rows=args.rows, 
+    board, start_square = generate_solvable_board(
+        num_rows=args.rows,
         num_cols=args.cols
     )
     
@@ -65,7 +96,8 @@ if __name__ == "__main__":
         board=board,
         num_rows=args.rows,
         num_cols=args.cols,
-        num_mines=args.mines
+        num_mines=args.mines,
+        recommended_start_square=start_square
     )
     
     play(game)
