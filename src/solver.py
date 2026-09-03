@@ -1,211 +1,114 @@
+"""
+Deterministic Minesweeper solving — the deep Solver module.
+
+One driver owns the solve loop; deduction strategies are pure: they
+inspect a Board and return moves, and the driver applies them. Because
+strategies never mutate the board, the "only reason over revealed
+information" rule lives in exactly one place: strategies can only act
+on information they can legitimately see, and the interface (moves in)
+makes the guard structural rather than a line of code copied between
+drivers.
+"""
+from typing import Callable, Optional
+
 from src.board import Board, SquareState
-from typing import TYPE_CHECKING, Any
 
-if TYPE_CHECKING:
-    from src.game import MinesweeperGame
+REVEAL = "reveal"
+FLAG = "flag"
+
+# A move: (x, y, action) with action in (REVEAL, FLAG)
+Move = tuple[int, int, str]
+
+OnMove = Callable[[int, int, str], None]
 
 
-class MinesweeperSolver:
-    def __init__(self, game: Any, headless: bool = False):
-        self.game = game
-        self.board: Board = game.board
-        self.headless = headless
+class SimpleRulesStrategy:
+    """
+    Basic per-square rules.
 
-    def _reveal_square(self, x: int, y: int) -> None:
-        """Reveal a square, with UI update only if not headless."""
-        if self.headless:
-            self.board.reveal_square(x, y)
-        else:
-            self.game.reveal_square(x, y)
+    Rule 1:
+        If the number of surrounding flags equals the square's value,
+        all remaining unrevealed surrounding squares are safe.
 
-    def _flag_square(self, x: int, y: int) -> None:
-        """Flag a square, with UI update only if not headless."""
-        if self.headless:
-            self.board.flag_square(x, y)
-        else:
-            self.game.toggle_flag_square(x, y)
+    Rule 2:
+        If the number of unrevealed surrounding squares equals the
+        number of mines still needed, all of those squares are mines.
+    """
 
-    def solve_board(self):
-        """
-        Solve the Minesweeper game using deterministic logic.
+    def deduce(self, board: Board) -> list[Move]:
+        moves: list[Move] = []
+        for y in range(board.num_rows):
+            for x in range(board.num_cols):
+                if board.get_square_state(x, y) != SquareState.REVEALED:
+                    continue
+                moves.extend(self._moves_for_square(board, x, y))
+        return moves
 
-        The solver repeatedly:
-        1. Applies simple local Minesweeper rules.
-        2. Applies subset/set-difference logic.
+    def _moves_for_square(self, board: Board, x: int, y: int) -> list[Move]:
+        value = board.get_square_value(x, y)
 
-        If neither technique can make further progress, the solver stops.
-        """
-        while not self.board.check_win() and not self.board.check_lose():
-            progress_made = False
-
-            # Step 1: Apply simple local rules.
-            for y in range(self.board.num_rows):
-                for x in range(self.board.num_cols):
-                    if self.board.get_square_state(x, y) != SquareState.REVEALED:
-                        continue
-
-                    if self.simple_resolve_surrounding(x, y):
-                        progress_made = True
-
-            if self.board.check_win() or self.board.check_lose():
-                break
-
-            # Step 2: Apply subset/set-difference logic.
-            if not progress_made:
-                if self.apply_set_logic():
-                    progress_made = True
-
-            # No deterministic progress can be made.
-            if not progress_made:
-                break
-
-    def simple_resolve_surrounding(self, x: int, y: int) -> bool:
-        """
-        Apply basic Minesweeper rules to a revealed square.
-
-        Rule 1:
-            If the number of surrounding flags equals the square's value,
-            all remaining unrevealed surrounding squares are safe.
-
-        Rule 2:
-            If the number of unrevealed surrounding squares equals the
-            number of mines still needed, all of those squares are mines.
-
-        Returns:
-            True if at least one square was revealed or flagged.
-        """
-        value = self.board.get_square_value(x, y)
-
-        # This method should only be called on revealed squares, but avoid
-        # treating a mine as a numbered square just in case.
+        # Only called on revealed squares; a detonated mine has no clue.
         if value < 0:
-            return False
-
-        progress_made = False
-
-        surrounding_squares = self.board.get_surrounding_squares(x, y)
+            return []
 
         flagged = []
         unrevealed = []
 
-        for square in surrounding_squares:
-            state = self.board.get_square_state(square[0], square[1])
-
+        for square in board.get_surrounding_squares(x, y):
+            state = board.get_square_state(square[0], square[1])
             if state == SquareState.FLAGGED:
                 flagged.append(square)
             elif state == SquareState.UNREVEALED:
                 unrevealed.append(square)
 
-        num_flags = len(flagged)
-        mines_needed = value - num_flags
+        mines_needed = value - len(flagged)
 
-        # Rule 1:
-        # We have already identified every mine surrounding this square,
-        # so every remaining unrevealed square is safe.
+        # Rule 1: every remaining unrevealed square is safe.
         if mines_needed == 0:
-            for square in unrevealed:
-                self._reveal_square(square[0], square[1])
-                progress_made = True
+            return [(sx, sy, REVEAL) for sx, sy in unrevealed]
 
-        # Rule 2:
-        # Every unrevealed square must be a mine.
-        elif mines_needed == len(unrevealed):
-            for square in unrevealed:
-                self._flag_square(square[0], square[1])
-                progress_made = True
+        # Rule 2: every unrevealed square must be a mine.
+        if mines_needed == len(unrevealed):
+            return [(sx, sy, FLAG) for sx, sy in unrevealed]
 
-        return progress_made
+        return []
 
-    def apply_set_logic(self) -> bool:
-        """
-        Compare sets of unrevealed squares surrounding revealed cells.
 
-        If Set A is a subset of Set B, then:
+class SetLogicStrategy:
+    """
+    Subset/set-difference logic.
 
-            B - A
+    If Set A is a subset of Set B, then B - A contains
+    mines(B) - mines(A) mines.
 
-        contains:
+    Therefore:
+        - If the difference requires 0 mines, every square in the
+          difference is safe.
+        - If the difference requires exactly len(difference) mines,
+          every square in the difference is a mine.
+    """
 
-            mines(B) - mines(A)
+    def deduce(self, board: Board) -> list[Move]:
+        constraints = build_constraints(board)
 
-        mines.
-
-        Therefore:
-            - If the difference requires 0 mines, every square in the
-              difference is safe.
-            - If the difference requires exactly len(difference) mines,
-              every square in the difference is a mine.
-
-        Returns:
-            True if at least one square was revealed or flagged.
-        """
-        progress_made = False
-
-        revealed_numbers = []
-
-        # Build the constraints generated by each revealed numbered square.
-        for y in range(self.board.num_rows):
-            for x in range(self.board.num_cols):
-                if self.board.get_square_state(x, y) != SquareState.REVEALED:
-                    continue
-
-                value = self.board.get_square_value(x, y)
-
-                # Only numbered squares generate constraints.
-                if value <= 0:
-                    continue
-
-                surrounding = self.board.get_surrounding_squares(x, y)
-
-                unrevealed = {
-                    square
-                    for square in surrounding
-                    if self.board.get_square_state(
-                        square[0],
-                        square[1]
-                    ) == SquareState.UNREVEALED
-                }
-
-                flags = {
-                    square
-                    for square in surrounding
-                    if self.board.get_square_state(
-                        square[0],
-                        square[1]
-                    ) == SquareState.FLAGGED
-                }
-
-                mines_needed = value - len(flags)
-
-                # An inconsistent constraint should never occur if all
-                # flags are correct. Ignore it rather than making unsafe
-                # deductions.
-                if mines_needed < 0 or mines_needed > len(unrevealed):
-                    continue
-
-                revealed_numbers.append({
-                    "pos": (x, y),
-                    "set": unrevealed,
-                    "needed": mines_needed,
-                })
+        # First action per square wins, so results are deterministic even
+        # when two constraint pairs touch the same square.
+        moves: dict[tuple[int, int], str] = {}
 
         # Compare every pair of constraints.
-        for i in range(len(revealed_numbers)):
-            for j in range(len(revealed_numbers)):
+        for i in range(len(constraints)):
+            for j in range(len(constraints)):
                 if i == j:
                     continue
 
-                a = revealed_numbers[i]
-                b = revealed_numbers[j]
-
-                set_a = a["set"]
-                set_b = b["set"]
+                a = constraints[i]
+                b = constraints[j]
 
                 # We can only subtract A from B if A is a subset of B.
-                if not set_a.issubset(set_b):
+                if not a["set"].issubset(b["set"]):
                     continue
 
-                diff_set = set_b - set_a
+                diff_set = b["set"] - a["set"]
                 diff_mines = b["needed"] - a["needed"]
 
                 if not diff_set:
@@ -213,16 +116,139 @@ class MinesweeperSolver:
 
                 # Difference contains no mines.
                 if diff_mines == 0:
-                    for x, y in diff_set:
-                        self._reveal_square(x, y)
-
-                    progress_made = True
+                    for square in diff_set:
+                        moves.setdefault(square, REVEAL)
 
                 # Every square in the difference is a mine.
                 elif diff_mines == len(diff_set):
-                    for x, y in diff_set:
-                        self._flag_square(x, y)
+                    for square in diff_set:
+                        moves.setdefault(square, FLAG)
 
+        return [(x, y, action) for (x, y), action in moves.items()]
+
+
+def build_constraints(board: Board) -> list[dict]:
+    """
+    Build the frontier constraints generated by each revealed numbered
+    square: the set of its unrevealed neighbors and how many mines they
+    contain. This is the shared fact both subset logic and Gaussian
+    elimination reason over.
+    """
+    constraints = []
+
+    for y in range(board.num_rows):
+        for x in range(board.num_cols):
+            if board.get_square_state(x, y) != SquareState.REVEALED:
+                continue
+
+            value = board.get_square_value(x, y)
+
+            # Only numbered squares generate constraints.
+            if value <= 0:
+                continue
+
+            surrounding = board.get_surrounding_squares(x, y)
+
+            unrevealed = {
+                square
+                for square in surrounding
+                if board.get_square_state(square[0], square[1])
+                == SquareState.UNREVEALED
+            }
+
+            flags = {
+                square
+                for square in surrounding
+                if board.get_square_state(square[0], square[1])
+                == SquareState.FLAGGED
+            }
+
+            mines_needed = value - len(flags)
+
+            # An inconsistent constraint should never occur if all
+            # flags are correct. Ignore it rather than making unsafe
+            # deductions.
+            if mines_needed < 0 or mines_needed > len(unrevealed):
+                continue
+
+            constraints.append({
+                "pos": (x, y),
+                "set": unrevealed,
+                "needed": mines_needed,
+            })
+
+    return constraints
+
+
+class Solver:
+    """
+    The solve engine: applies deduction strategies to a Board.
+
+    Strategies are tried in order; whenever one produces effective moves,
+    the cheaper strategies get another chance first. Solving stops when
+    the game is decided or no strategy can make deterministic progress.
+    """
+
+    def __init__(self, board: Board, strategies: list):
+        self.board = board
+        self.strategies = list(strategies)
+
+    def solve(self, on_move: Optional[OnMove] = None) -> bool:
+        """
+        Solve the board with deterministic logic.
+
+        Args:
+            on_move: optional callback (x, y, action) invoked for every
+                applied move — the seam the UI uses to render progress.
+
+        Returns:
+            True if the board was solved, False if it got stuck or lost.
+        """
+        while not self.board.check_win() and not self.board.check_lose():
+            progress_made = False
+
+            for strategy in self.strategies:
+                moves = strategy.deduce(self.board)
+
+                applied = 0
+                for x, y, action in moves:
+                    if self._apply_move(x, y, action):
+                        applied += 1
+                        if on_move:
+                            on_move(x, y, action)
+
+                if applied:
                     progress_made = True
+                    break
 
-        return progress_made
+            if not progress_made:
+                break
+
+        return self.board.check_win()
+
+    def _apply_move(self, x: int, y: int, action: str) -> bool:
+        """Apply one move; returns True only if it changed the board."""
+        if self.board.get_square_state(x, y) != SquareState.UNREVEALED:
+            return False
+        if action == REVEAL:
+            self.board.reveal_square(x, y)
+        else:
+            self.board.flag_square(x, y)
+        return True
+
+
+class HybridMinesweeperSolver(Solver):
+    """
+    The production solver configuration: cheap rules first, then subset
+    logic, then Gaussian elimination for hard frontiers.
+    """
+
+    def __init__(self, board: Board):
+        # Lazy import keeps the basic solver usable without sympy.
+        from src.solver_gauss import GaussianStrategy
+
+        super().__init__(board, [
+            SimpleRulesStrategy(),
+            SetLogicStrategy(),
+            GaussianStrategy(),
+        ])

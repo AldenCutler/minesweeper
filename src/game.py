@@ -8,7 +8,7 @@ from src.board import (
     Board
 )
 from src.board_analyzer import BoardAnalyzer
-from src.solver_hybrid import HybridMinesweeperSolver
+from src.solver import HybridMinesweeperSolver, REVEAL
 from enum import Enum
 
 TILE_SIZE = 40
@@ -22,13 +22,10 @@ class MouseButton(Enum):
     RIGHT = 3
 
 class MinesweeperGame:
-    def __init__(self, board: Board, width=1200, height=700, num_mines=99, num_rows=16, num_cols=30, recommended_start_square=None):
+    def __init__(self, board: Board, width=1200, height=700, recommended_start_square=None):
         self.width:     int            = width
         self.height:    int            = height
         self.board:     Board          = board
-        self.num_mines: int            = num_mines
-        self.num_rows:  int            = num_rows
-        self.num_cols:  int            = num_cols
         self.recommended_start_square: tuple[int, int] | None = recommended_start_square
         
         pygame.init()
@@ -52,8 +49,8 @@ class MinesweeperGame:
         self.window.blit(solver_btn, (self.width // 2 + 20, 650))
         
         # draw grid
-        for y in range(self.num_rows):
-            for x in range(self.num_cols):
+        for y in range(self.board.num_rows):
+            for x in range(self.board.num_cols):
                 rect = pygame.Rect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE)
                 pygame.draw.rect(self.window, (255, 255, 255), rect, 1)
                 
@@ -87,7 +84,7 @@ class MinesweeperGame:
             new_x = x + offset[0]
             new_y = y + offset[1]
             # out of bounds checks
-            if new_y < 0 or new_y > self.num_rows - 1 or new_x < 0 or new_x > self.num_cols - 1:
+            if new_y < 0 or new_y > self.board.num_rows - 1 or new_x < 0 or new_x > self.board.num_cols - 1:
                 continue
             if (new_x, new_y) in self.board.get_revealed_squares():
                 continue
@@ -143,13 +140,13 @@ class MinesweeperGame:
         """
         Reveal all mines on the board when the game is over
         """
-        for y in range(self.num_rows):
-            for x in range(self.num_cols):
+        for y in range(self.board.num_rows):
+            for x in range(self.board.num_cols):
                 square_value = self.board.get_square_value(x, y)
                 if square_value != MINE_VALUE:
                     continue
-                if (x, y) == self.board.get_revealed_squares()[-1]:
-                    # keep the last revealed mine as a red mine
+                if (x, y) == self.board.detonated_mine:
+                    # keep the detonated mine as a red mine
                     self.set_square(x, y, "-1")
                 else:
                     self.set_square(x, y, "mine")
@@ -188,16 +185,17 @@ class MinesweeperGame:
         # Generate a solvable board with a recommended starting square
         logger.debug("Generating solvable board...")
         while True:
-            self.board = Board(num_rows=self.num_rows, num_cols=self.num_cols)
-            
-            if BoardAnalyzer.is_solvable(self.board):
-                start_square = BoardAnalyzer.find_best_starting_square(self.board)
-                if start_square:
-                    logger.debug(f"Generated solvable board! Starting square: {start_square}")
-                    self.recommended_start_square = start_square
-                    break
-                else:
-                    logger.debug("Board is solvable but no good starting square found, regenerating...")
+            self.board = Board(
+                num_rows=self.board.num_rows,
+                num_cols=self.board.num_cols,
+                num_mines=self.board.num_mines,
+            )
+
+            start_square = BoardAnalyzer.find_best_starting_square(self.board)
+            if start_square:
+                logger.debug(f"Generated solvable board! Starting square: {start_square}")
+                self.recommended_start_square = start_square
+                break
             else:
                 logger.debug("Board is not solvable, regenerating...")
         
@@ -231,9 +229,19 @@ class MinesweeperGame:
         Runs the automated solver on the current board state
         """
         logger.debug("Running solver...")
-        solver = HybridMinesweeperSolver(self)
-        solver.solve_board()
+        solver = HybridMinesweeperSolver(self.board)
+        solver.solve(on_move=self._render_move)
         pygame.display.update()
+
+    def _render_move(self, x: int, y: int, action: str) -> None:
+        """
+        The UI adapter at the solver seam: render a move as it is
+        applied to the board.
+        """
+        if action == REVEAL:
+            self.set_square(x, y, str(self.board.get_square_value(x, y)))
+        else:
+            self.set_square(x, y, "flag")
 
     def handle_mouse_click(self, event):
         # get x, y coordinates of clicked square
@@ -252,7 +260,7 @@ class MinesweeperGame:
         # get x, y coordinates of clicked square
         x = pos[0] // TILE_SIZE
         y = pos[1] // TILE_SIZE
-        if y > self.num_rows - 1 or y < 0 or x > self.num_cols - 1 or x < 0:
+        if y > self.board.num_rows - 1 or y < 0 or x > self.board.num_cols - 1 or x < 0:
             return
         
         
