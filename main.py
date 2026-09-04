@@ -1,55 +1,26 @@
 from src.game import MinesweeperGame
 from src.board import Board
-from src.board_analyzer import BoardAnalyzer
+from src.board_analyzer import BoardAnalyzer, UnsolvableBoardError
 import logging
 import argparse
 import pygame
+import sys
 
 logger = logging.getLogger(__name__)
 
-def generate_solvable_board(num_rows: int, num_cols: int, num_mines: int) -> tuple[Board, tuple[int, int]]:
-    """
-    Generate a solvable Minesweeper board.
+FPS = 60
 
-    Keeps generating boards until one is found that can be solved
-    without guessing, then returns the board and the recommended
-    starting square.
-
-    Args:
-        num_rows: Number of rows in the board
-        num_cols: Number of columns in the board
-        num_mines: Number of mines in the board
-
-    Returns:
-        (board, (start_x, start_y)) - the solvable board and starting square
-    """
-    while True:
-        board = Board(num_rows=num_rows, num_cols=num_cols, num_mines=num_mines)
-
-        logger.debug("Checking if board is solvable...")
-        start_square = BoardAnalyzer.find_best_starting_square(board)
-        if start_square:
-            logger.debug(f"Board is solvable! Starting square: {start_square}")
-            return board, start_square
-        else:
-            logger.debug("Board is not solvable, regenerating...")
 
 def play(game: MinesweeperGame):
     """
     Main game loop
     """
+    clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
-
-            if game.board.check_lose():
-                game.reveal_all_mines()
-                return game_over(game)
-
-            if game.board.check_win():
-                return game_over(game)
+                sys.exit()
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
@@ -58,13 +29,29 @@ def play(game: MinesweeperGame):
             if event.type == pygame.MOUSEBUTTONDOWN:
                 game.handle_mouse_click(event)
 
+        if game.board.check_lose():
+            game.reveal_all_mines()
+            return game_over(game)
+
+        if game.board.check_win():
+            game.show_win()
+            return game_over(game)
+
+        clock.tick(FPS)
+
 
 def game_over(game: MinesweeperGame):
+    clock = pygame.time.Clock()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
-                exit()
+                sys.exit()
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    game.reset_game()
+                    return play(game)
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
@@ -72,28 +59,38 @@ def game_over(game: MinesweeperGame):
                     game.reset_game()
                     return play(game)
 
+        clock.tick(FPS)
+
 if __name__ == "__main__":
 
-    args = argparse.ArgumentParser(description="Play Minesweeper")
-    args.add_argument("--rows", type=int, default=16, help="Number of rows in the board")
-    args.add_argument("--cols", type=int, default=30, help="Number of columns in the board")
-    args.add_argument("--mines", type=int, default=None,
-                      help="Number of mines in the board (defaults to the standard count for the board size)")
-    args.add_argument("--debug", action="store_true", help="Enable debug mode")
-    args = args.parse_args()
+    parser = argparse.ArgumentParser(description="Play Minesweeper")
+    parser.add_argument("--rows", type=int, default=16, help="Number of rows in the board")
+    parser.add_argument("--cols", type=int, default=30, help="Number of columns in the board")
+    parser.add_argument("--mines", type=int, default=None,
+                      help="Number of mines (classic count for 9x9/16x16/16x30, else expert density)")
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    args = parser.parse_args()
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
 
+    if args.rows < 1 or args.cols < 1:
+        parser.error("rows and cols must be at least 1")
+
     num_mines = args.mines
     if num_mines is None:
-        num_mines = Board.get_num_mines_for_board_size(args.rows, args.cols)
+        num_mines = Board.default_mine_count(args.rows, args.cols)
 
-    board, start_square = generate_solvable_board(
-        num_rows=args.rows,
-        num_cols=args.cols,
-        num_mines=num_mines,
-    )
+    try:
+        board, start_square = BoardAnalyzer.generate_solvable_board(
+            num_rows=args.rows,
+            num_cols=args.cols,
+            num_mines=num_mines,
+        )
+    except UnsolvableBoardError as exc:
+        parser.error(str(exc))
+    except ValueError as exc:
+        parser.error(str(exc))
 
     game = MinesweeperGame(
         board=board,

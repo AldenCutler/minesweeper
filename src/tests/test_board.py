@@ -114,18 +114,40 @@ def test_check_win():
         [M, 1],
         [1, 1],
     ]
-    # Reveal all non-mine squares
     board = Board.from_grid(grid=grid)
     board.reveal_square(1, 0)
     board.reveal_square(0, 1)
     board.reveal_square(1, 1)
     assert board.check_win() is True
 
-    # If any non-mine square is left unrevealed, the game is not won
     board = Board.from_grid(grid=grid)
     board.reveal_square(1, 0)
     board.reveal_square(0, 1)
     assert board.check_win() is False
+
+
+def test_check_win_false_after_detonation():
+    board = Board.from_grid(
+        grid=[[M, 1], [1, 1]],
+        revealed=[(1, 0), (0, 1), (1, 1), (0, 0)],
+    )
+    assert board.detonated_mine == (0, 0)
+    assert board.check_lose() is True
+    assert board.check_win() is False
+
+
+def test_visible_value_hides_unrevealed_clues():
+    board = Board.from_grid(grid=[[M, 1], [1, 1]], revealed=[(1, 0)])
+    assert board.visible_value(1, 0) == 1
+    assert board.visible_value(0, 0) is None
+    assert board.get_square_value(0, 0) == M
+
+
+def test_default_mine_count():
+    assert Board.default_mine_count(9, 9) == 10
+    assert Board.default_mine_count(16, 16) == 40
+    assert Board.default_mine_count(16, 30) == 99
+    assert Board.default_mine_count(10, 10) == round(100 * 99 / 480)
 
 
 def test_get_num_surrounding_mines():

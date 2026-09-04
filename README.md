@@ -1,12 +1,36 @@
-# 🚩 Minesweeper 🚩
+# Minesweeper
 
-This is my attempt at re-creating minesweeper. I've been a fan of the game for a while so I used my knowledge of how Minesweeper works to create this Python program using pygame. All graphics were found online. I would recommend using a Python version no older than 3.11.3 since that is what I used to write this.
+A pygame Minesweeper with a no-guessing generator and a deterministic auto-solver.
 
-## To Run
+Python 3.11+ recommended.
 
-1. Download this repository to your local machine.
-2. Run the ```main.py``` program in the downloaded folder.
+## Setup
 
-## Issues or Bugs
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
 
-If you run into any bugs in my code please let me know so I can fix it. I'm open to any suggestions as well :)
+## Run
+
+From the repo root:
+
+```bash
+.venv/bin/python main.py
+```
+
+Classic sizes if `--mines` is omitted: beginner 9×9/10, intermediate 16×16/40, expert 16×30/99. Other sizes use expert density.
+
+```bash
+.venv/bin/python main.py --rows 9 --cols 9
+.venv/bin/python main.py --rows 10 --cols 10 --mines 15
+.venv/bin/python main.py --debug
+```
+
+The highlighted square is a first click that solves the board without guessing. **R** or the face button generates a new board. The solve button runs the auto-solver. On win the face becomes `win.png`.
+
+## Tests
+
+```bash
+SDL_VIDEODRIVER=dummy .venv/bin/python -m pytest src/tests -q
+```

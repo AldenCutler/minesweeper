@@ -2,8 +2,10 @@
 Analyzer tests: certifying no-guessing boards. The certification solver
 works on a clone, so the board under test is never modified.
 """
+import pytest
+
 from src.board import Board, MINE_VALUE, SquareState
-from src.board_analyzer import BoardAnalyzer
+from src.board_analyzer import BoardAnalyzer, UnsolvableBoardError
 
 M = MINE_VALUE
 
@@ -34,3 +36,8 @@ def test_rejects_board_where_every_first_click_is_a_guess():
 
     assert BoardAnalyzer.find_best_starting_square(board) is None
     assert BoardAnalyzer.is_solvable(board) is False
+
+
+def test_generate_solvable_board_raises_when_capped():
+    with pytest.raises(UnsolvableBoardError):
+        BoardAnalyzer.generate_solvable_board(1, 2, 1, max_attempts=3)

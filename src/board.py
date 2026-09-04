@@ -77,8 +77,13 @@ class Board:
 
         Dimensions and mine count are derived from the grid, which makes
         this the natural way to write small boards in tests and analysis.
+        If a mine is already in `revealed`, detonated_mine is set to it.
         """
         mine_count = sum(row.count(MINE_VALUE) for row in grid)
+        detonated = None
+        for x, y in revealed:
+            if grid[y][x] == MINE_VALUE:
+                detonated = (x, y)
         return cls._from_state(
             num_rows=len(grid),
             num_cols=len(grid[0]) if grid else 0,
@@ -86,6 +91,7 @@ class Board:
             grid=grid,
             revealed=revealed,
             flagged=flagged,
+            detonated_mine=detonated,
         )
 
     @staticmethod
@@ -117,6 +123,19 @@ class Board:
                 "pass an explicit mine count instead"
             )
 
+    @staticmethod
+    def default_mine_count(num_rows: int, num_cols: int) -> int:
+        """
+        Classic count for beginner/intermediate/expert; otherwise expert
+        density (~20.6%), clamped so at least one safe square remains.
+        """
+        try:
+            return Board.get_num_mines_for_board_size(num_rows, num_cols)
+        except ValueError:
+            cells = num_rows * num_cols
+            mines = round(cells * 99 / 480)
+            return max(1, min(mines, cells - 1))
+
     def clone(self) -> "Board":
         """
         Returns an independent deep copy: same layout and state, no shared
@@ -139,17 +158,14 @@ class Board:
         """
         grid = [[EMPTY_VALUE for _ in range(self.num_cols)] for _ in range(self.num_rows)]
 
-        # add mines
-        mines = []
-        for _ in range(self.num_mines):
-            x, y = Board.generate_mine_pos(self.num_rows, self.num_cols)
-            while (x, y) in mines:
-                # if there's already a mine at x, y, generate new x, y
-                x, y = Board.generate_mine_pos(self.num_rows, self.num_cols)
-            mines.append((x, y))
+        positions = [
+            (x, y)
+            for y in range(self.num_rows)
+            for x in range(self.num_cols)
+        ]
+        for x, y in random.sample(positions, self.num_mines):
             grid[y][x] = MINE_VALUE
 
-        # add numbers
         self._grid = grid
         for y in range(self.num_rows):
             for x in range(self.num_cols):
@@ -234,13 +250,22 @@ class Board:
 
     def get_square_value(self, x: int, y: int) -> int:
         """
-        Returns the clue value of the square at (x, y)
-        - x: x coordinate of square
-        - y: y coordinate of square
+        Returns the true clue value of the square at (x, y), even if the
+        square is unrevealed. Solvers should use visible_value instead.
         - return: number of surrounding mines, or MINE_VALUE for a mine
         """
         self._validate_square(x, y)
         return self._grid[y][x]
+
+    def visible_value(self, x: int, y: int) -> int | None:
+        """
+        Clue visible to a player: the true value if the square is
+        revealed, otherwise None. This is the solver's only legal read
+        of a square's contents.
+        """
+        if self.get_square_state(x, y) != SquareState.REVEALED:
+            return None
+        return self.get_square_value(x, y)
 
     def get_square_state(self, x: int, y: int) -> SquareState:
         """
@@ -262,9 +287,9 @@ class Board:
         Checks if the game is won
         - return: True if game is won, False otherwise
         """
-        if len(self._revealed) == (self.num_rows * self.num_cols) - self.num_mines:
-            return True
-        return False
+        if self.detonated_mine is not None:
+            return False
+        return len(self._revealed) == (self.num_rows * self.num_cols) - self.num_mines
 
     def check_lose(self) -> bool:
         """

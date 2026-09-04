@@ -39,15 +39,14 @@ class SimpleRulesStrategy:
         moves: list[Move] = []
         for y in range(board.num_rows):
             for x in range(board.num_cols):
-                if board.get_square_state(x, y) != SquareState.REVEALED:
+                value = board.visible_value(x, y)
+                if value is None:
                     continue
-                moves.extend(self._moves_for_square(board, x, y))
+                moves.extend(self._moves_for_square(board, x, y, value))
         return moves
 
-    def _moves_for_square(self, board: Board, x: int, y: int) -> list[Move]:
-        value = board.get_square_value(x, y)
-
-        # Only called on revealed squares; a detonated mine has no clue.
+    def _moves_for_square(self, board: Board, x: int, y: int, value: int) -> list[Move]:
+        # A detonated mine has no clue.
         if value < 0:
             return []
 
@@ -138,13 +137,8 @@ def build_constraints(board: Board) -> list[dict]:
 
     for y in range(board.num_rows):
         for x in range(board.num_cols):
-            if board.get_square_state(x, y) != SquareState.REVEALED:
-                continue
-
-            value = board.get_square_value(x, y)
-
-            # Only numbered squares generate constraints.
-            if value <= 0:
+            value = board.visible_value(x, y)
+            if value is None or value <= 0:
                 continue
 
             surrounding = board.get_surrounding_squares(x, y)

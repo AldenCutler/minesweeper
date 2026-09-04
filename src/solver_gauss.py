@@ -79,10 +79,10 @@ class GaussianStrategy:
             #
             # Subtract mines that we have already flagged because they
             # aren't variables in our equation.
-            matrix[row, -1] = (
-                board.get_square_value(x, y)
-                - board.get_num_surrounding_flags(x, y)
-            )
+            clue = board.visible_value(x, y)
+            if clue is None:
+                clue = 0
+            matrix[row, -1] = clue - board.get_num_surrounding_flags(x, y)
 
         # Reduce the augmented matrix to reduced row echelon form.
         reduced_matrix = matrix.rref()[0]
@@ -113,13 +113,8 @@ class GaussianStrategy:
 
         for y in range(board.num_rows):
             for x in range(board.num_cols):
-                if board.get_square_state(x, y) != SquareState.REVEALED:
-                    continue
-
-                value = board.get_square_value(x, y)
-
-                # Only numbered squares generate equations.
-                if value <= 0:
+                value = board.visible_value(x, y)
+                if value is None or value <= 0:
                     continue
 
                 surrounding = board.get_surrounding_squares(x, y)
@@ -214,23 +209,14 @@ def find_forced_squares(
             # Strategy 2: Deterministic substitution
             # If all but one variable in a row are determined, determine the last one.
             undetermined = []
-            determined_mines = 0
-            determined_safe = 0
-
+            accounted = sympy.Integer(0)
             for col in non_zero_cols:
                 square = unknown_squares[col]
+                coefficient = cast(sympy.Basic, matrix[row, col])
                 if square in mines:
-                    coefficient = cast(sympy.Basic, matrix[row, col])
-                    if coefficient > 0:  # type: ignore
-                        determined_mines += 1
-                    else:
-                        determined_safe += 1
+                    accounted += coefficient  # type: ignore
                 elif square in not_mines:
-                    coefficient = cast(sympy.Basic, matrix[row, col])
-                    if coefficient > 0:  # type: ignore
-                        determined_safe += 1
-                    else:
-                        determined_mines += 1
+                    pass
                 else:
                     undetermined.append(col)
 
@@ -239,18 +225,13 @@ def find_forced_squares(
                 col = undetermined[0]
                 coefficient = cast(sympy.Basic, matrix[row, col])
                 square = unknown_squares[col]
+                remaining = rhs - accounted  # type: ignore
 
-                # Calculate what this variable must be.
-                remaining_mines_needed = int(rhs) - determined_mines  # type: ignore
-                remaining_capacity = int(coefficient)  # type: ignore
-
-                if remaining_mines_needed == remaining_capacity:
-                    # This variable must be a mine.
+                if remaining == coefficient:
                     if square not in mines:
                         mines.add(square)
                         changed = True
-                elif remaining_mines_needed == 0:
-                    # This variable must be safe.
+                elif remaining == 0:
                     if square not in not_mines:
                         not_mines.add(square)
                         changed = True
