@@ -34,3 +34,15 @@ The highlighted square is a first click that solves the board without guessing. 
 ```bash
 SDL_VIDEODRIVER=dummy .venv/bin/python -m pytest src/tests -q
 ```
+
+## TODO List
+
+- [ ] timer
+- [ ] different board sizes
+- [ ] win streak?
+- [ ] speed up solver bc it slow as balls
+- [ ] save top times per board size (locally? save file somehow?)
+- [ ] allow resizing window
+- [ ] make solver button hint button instead
+- [ ] need to make all sprites pixel consistent
+- [ ] saw this on minesweeper.online: keep track of sequence of all clicked squares to allow game replays
